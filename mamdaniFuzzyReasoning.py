@@ -2,7 +2,7 @@ import numpy as np
 
 class MamdaniReasoning:
     def __init__(self):
-        self.samplePoints = np.arange(0, 10.5, 0.5).tolist()
+        self.samplePoints = np.arange(-10, 10.5, 0.5).tolist()
         self.distance = \
             {
                 'VerySmall': (1.0, 2.5),
@@ -158,7 +158,7 @@ class MamdaniReasoning:
 
         return min(veryBigFuzzyResult, deltaValue), 'FloorIt'
 
-    def rule_5(self, distPosition, deltaPosition):
+    def rule_5(self, distPosition):
         # If distance is VERYSMALL then action is BRAKEHARD
 
         verySmallFuzzyResult = self.reverse_grade(
@@ -169,40 +169,85 @@ class MamdaniReasoning:
         )
         return verySmallFuzzyResult, 'BrakeHard'
 
-    def action_clipped_samples(self, resultAndAction):
-        clip = resultAndAction(0)
-        ruleAction = resultAndAction(1)
+    def generate_clipped_action_fuzzy_set(self, resultAndAction):
+        clip = resultAndAction[0]
+        ruleAction = resultAndAction[1]
+
         if ruleAction == 'BrakeHard':
-            return [
-                ( pos,
+            return {
+                pos:
                 self.reverse_grade(
                     pos,
-                    self.action['BrakeHard'][0],
-                    self.action['BrakeHard'][1],
+                    self.action[ruleAction][0],
+                    self.action[ruleAction][1],
                     clip
                 )
-                  ) for pos in self.samplePoints
-                ]
-        elif ruleAction == 'SlowDown':
-            pass
-        elif ruleAction == 'None':
-            pass
-        elif ruleAction == 'SpeedUp':
-            pass
+                for pos in self.samplePoints
+            }
+        elif ruleAction == 'FloorIt':
+            return {
+                pos:
+                self.grade(
+                    pos,
+                    self.action[ruleAction][0],
+                    self.action[ruleAction][1],
+                    clip
+                )
+                for pos in self.samplePoints
+            }
         else:
+            return {
+                pos:
+                self.triangle(
+                    pos,
+                    self.action[ruleAction][0],
+                    self.action[ruleAction][1],
+                    self.action[ruleAction][2],
+                    clip
+                )
+                for pos in self.samplePoints
+            }
+
+    def aggregate_action_sets(self, action_sets):
+        aggregateDict = {}
+        for point in self.samplePoints:
+            value = 0
+            for set in action_sets:
+                value = max(value, set[point])
+            aggregateDict[point] = value
+        return aggregateDict
+
+    def centre_of_gravity(self, aggregatedActionDict):
+        values = [aggregatedActionDict[key]*key for key in aggregatedActionDict]
+        numerator = sum(values)
+        denominator = sum(aggregatedActionDict[key] for key in aggregatedActionDict)
+        return numerator / denominator
 
 
+distance = 3.7
+delta = 1.2
 
 mam = MamdaniReasoning()
-print("rule 1: ", mam.rule_1(3.7, 1.2))
-print("rule 2: ", mam.rule_2(3.7, 1.2))
-print("rule 3: ", mam.rule_3(3.7, 1.2))
-print("rule 4: ", mam.rule_4(3.7, 1.2))
-print("rule 5: ", mam.rule_5(3.7, 1.2))
 
+# Save the rule results
 rules_res = []
-rules_res.append(mam.rule_1(3.7, 1.2))
-rules_res.append(mam.rule_2(3.7, 1.2))
-rules_res.append(mam.rule_3(3.7, 1.2))
-rules_res.append(mam.rule_4(3.7, 1.2))
-rules_res.append(mam.rule_5(3.7, 1.2))
+rules_res.append(mam.rule_1(distance, delta))
+rules_res.append(mam.rule_2(distance, delta))
+rules_res.append(mam.rule_3(distance, delta))
+rules_res.append(mam.rule_4(distance, delta))
+rules_res.append(mam.rule_5(distance))
+
+# Print all rules and their results
+ruleNo = 1
+for rule in rules_res:
+    print("rule " + str(ruleNo) + ": ", rule)
+    ruleNo += 1
+
+# Generate all clipped action fuzzy sets.
+action_sets = [mam.generate_clipped_action_fuzzy_set(ruleResult) for ruleResult in rules_res]
+
+# Generate aggregate of all action sets
+aggregate = mam.aggregate_action_sets(action_sets)
+
+# Print centre of gravity
+print(mam.centre_of_gravity(aggregate))
